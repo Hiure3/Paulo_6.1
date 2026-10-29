@@ -1,0 +1,3 @@
+- `aplicar-sri.mjs` – trava o hash dos scripts de CDN (use com internet; veja o guia).
+- `patch_index.py`, `patch_cliente.py`, `gerar_regras.py`, `build_qr.py` – registro de **exatamente o que foi mudado** da v6 para a v7 (referência/auditoria; precisam dos arquivos v6 em `orig/`).
+- `check_syntax.js` – confere se o JavaScript embutido nos HTML é válido.

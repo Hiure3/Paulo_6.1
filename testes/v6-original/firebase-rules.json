@@ -1,0 +1,137 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "staff": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+        "mustChangePassword": {
+          ".write": "auth != null && auth.uid === $uid && newData.val() === false"
+        }
+      }
+    },
+    "tables": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "historico": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "chats_arquivo": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "staff_presence": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "backups": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$id": {
+        ".write": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente') || (auth != null && root.child('staff').child(auth.uid).child('active').val() === true && !data.exists())"
+      }
+    },
+    "exclusoes": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$id": {
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid"
+      }
+    },
+    "mesa_sid": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "sessoes": {
+      "$sid": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+      }
+    },
+    "mesa_publica": {
+      "$mesa": {
+        ".read": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true) || (auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true)",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+      }
+    },
+    "acessos": {
+      "$sid": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || auth != null && root.child('staff').child(auth.uid).child('active').val() === true)",
+          ".write": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true) || (auth != null && auth.uid === $uid && newData.val() === true && root.child('sessoes').child($sid).child('status').val() === 'ocupada')"
+        }
+      }
+    },
+    "encomendas": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".indexOn": [
+        "whatsappDigits",
+        "orderNumber",
+        "sessionId"
+      ],
+      "$id": {
+        ".read": "auth != null && data.child('uid').val() === auth.uid",
+        ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid && newData.child('sessionId').exists() && root.child('acessos').child(newData.child('sessionId').val()).child(auth.uid).val() === true"
+      }
+    },
+    "contadores": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "encomenda": {
+        ".write": "auth != null && newData.isNumber() && newData.val() === (data.exists() ? data.val() + 1 : 1)"
+      }
+    },
+    "chats": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        "$msg": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true && !data.exists() && newData.child('sender').val() === 'cliente'"
+        }
+      }
+    },
+    "chat_meta": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        "clientPing": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true"
+        },
+        "clientReadUpTo": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true"
+        },
+        "clientTyping": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true"
+        }
+      }
+    },
+    "finalizar_pedidos": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true"
+      }
+    },
+    "feedbacks": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$id": {
+        ".write": "auth != null && !data.exists() && newData.exists()"
+      }
+    },
+    "avaliacoes_sessao": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$sid": {
+        ".read": "auth != null && root.child('acessos').child($sid).child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('acessos').child($sid).child(auth.uid).val() === true && (!data.exists() || !newData.exists())"
+      }
+    }
+  }
+}

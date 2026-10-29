@@ -1,0 +1,1359 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartComanda - Padaria & Confeitaria Digital</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        [x-cloak] { display: none !important; }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-slide-in {
+            animation: slideInRight 0.4s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex items-center justify-center p-3 sm:p-4 relative overflow-x-hidden" x-data="clienteApp()" x-init="init()">
+
+    <!-- NOTIFICAÇÃO NO CANTO SUPERIOR DIREITO DO TELEMÓVEL DO CLIENTE (EXIBIDA APENAS UMA VEZ NA FINALIZAÇÃO DA COMANDA NO WINDOWS) -->
+    <div x-show="showSuccessNotification" x-cloak 
+         x-transition:enter="transition ease-out duration-300 transform"
+         x-transition:enter-start="translate-x-full opacity-0"
+         x-transition:enter-end="translate-x-0 opacity-100"
+         x-transition:leave="transition ease-in duration-200 transform"
+         x-transition:leave-start="translate-x-0 opacity-100"
+         x-transition:leave-end="translate-x-full opacity-0"
+         class="fixed top-4 right-4 z-50 bg-emerald-500 text-slate-950 font-bold px-4 py-3 rounded-xl shadow-2xl border-2 border-emerald-300 flex items-center space-x-2.5 max-w-xs animate-slide-in">
+        <div class="bg-slate-950 text-emerald-400 p-1.5 rounded-lg flex items-center justify-center shrink-0">
+            <i class="fa-solid text-lg" :class="notificationIcon"></i>
+        </div>
+        <div class="flex flex-col text-left">
+            <span class="text-[10px] font-black uppercase tracking-wider text-slate-950">SmartComanda</span>
+            <span class="text-xs font-extrabold text-slate-950" x-text="notificationText"></span>
+        </div>
+        <button @click="showSuccessNotification = false" class="text-slate-900 hover:text-black ml-2 font-bold text-sm">
+            <i class="fa-solid fa-xmark"></i>
+        </button>
+    </div>
+
+    <!-- MODAL DE CHAT - FALAR COM O ATENDENTE (tempo real com o PC da loja) -->
+    <div x-show="showChatModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl flex flex-col h-[560px] max-h-[92vh] overflow-hidden">
+            <!-- Header Chat -->
+            <div class="bg-slate-900 p-3.5 border-b border-slate-700 flex justify-between items-center">
+                <div class="flex items-center space-x-2.5">
+                    <div class="bg-indigo-600 text-white w-9 h-9 rounded-xl flex items-center justify-center font-bold">
+                        <i class="fa-solid fa-headset text-base"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm text-white">Atendimento da Padaria</h4>
+                        <p class="text-[10px] flex items-center space-x-1" :class="attendantOnline ? 'text-emerald-400' : 'text-slate-400'">
+                            <span class="w-1.5 h-1.5 rounded-full" :class="attendantOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-500'"></span>
+                            <span x-text="attendantTyping ? 'Atendente digitando...' : (attendantOnline ? 'Atendente em linha • Mesa ' + tableNumber : 'Equipe ausente no momento • Mesa ' + tableNumber)"></span>
+                        </p>
+                    </div>
+                </div>
+                <button @click="showChatModal = false" class="text-slate-400 hover:text-white p-1">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Messages List -->
+            <div id="chatMessagesBox" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-950 text-xs">
+                <template x-if="chatMessages.length === 0">
+                    <div class="text-center py-8 text-slate-500 space-y-2">
+                        <i class="fa-solid fa-comments text-3xl opacity-50"></i>
+                        <p>Olá! Como podemos te ajudar hoje?</p>
+                        <p class="text-[10px]">Envie uma mensagem ou toque em um atalho abaixo.</p>
+                    </div>
+                </template>
+                <template x-for="msg in chatMessages" :key="msg.id">
+                    <div class="flex flex-col" :class="msg.sender === 'cliente' ? 'items-end' : 'items-start'">
+                        <div class="max-w-[80%] rounded-2xl px-3.5 py-2"
+                             :class="msg.sender === 'cliente' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'">
+                            <p class="text-xs font-medium leading-relaxed whitespace-pre-wrap break-words" x-text="msg.text"></p>
+                            <span class="text-[9px] opacity-70 flex items-center justify-end space-x-1 mt-1">
+                                <span x-text="msg.time"></span>
+                                <template x-if="msg.sender === 'cliente'">
+                                    <i class="fa-solid" :class="msg.failed ? 'fa-triangle-exclamation text-amber-300' : (msg.pending ? 'fa-clock' : (isReadByStaff(msg) ? 'fa-check-double text-sky-300' : 'fa-check'))"></i>
+                                </template>
+                            </span>
+                        </div>
+                        <button x-show="msg.failed" @click="retryMessage(msg.localId)" class="text-[10px] text-amber-400 underline mt-0.5 px-1">Falha ao enviar. Toque para reenviar</button>
+                        <span class="text-[9px] text-slate-500 mt-0.5 px-1" x-text="msg.sender === 'cliente' ? 'Você' : (msg.agent ? String(msg.agent).split(' ')[0] : 'Atendente')"></span>
+                    </div>
+                </template>
+                <div x-show="attendantTyping" class="text-[10px] text-slate-500 italic">Atendente digitando...</div>
+            </div>
+
+            <!-- Encerrado -->
+            <template x-if="chatClosed">
+                <div class="p-3 text-center text-[11px] text-slate-400 bg-slate-900 border-t border-slate-700"
+                     x-text="sessionEnded ? 'Atendimento encerrado: sua comanda foi finalizada. Obrigado pela visita!' : 'Conectando à sua comanda...'">
+                </div>
+            </template>
+
+            <!-- Atalhos + Input Message -->
+            <div x-show="!chatClosed" class="bg-slate-900 border-t border-slate-700">
+                <p x-show="chatNotice" class="px-3 pt-2 text-[10px] text-amber-400" x-text="chatNotice"></p>
+                <div class="px-3 pt-2.5 flex gap-1.5 overflow-x-auto">
+                    <template x-for="chip in chatChips" :key="chip.label">
+                        <button @click="sendChip(chip)" class="shrink-0 bg-slate-950 hover:bg-indigo-600/30 border border-slate-700 hover:border-indigo-500/60 text-slate-200 text-[11px] font-bold px-2.5 py-1.5 rounded-full transition-all flex items-center space-x-1.5">
+                            <i class="fa-solid" :class="chip.icon"></i>
+                            <span x-text="chip.label"></span>
+                        </button>
+                    </template>
+                </div>
+                <div class="p-3 flex items-center space-x-2">
+                    <input type="text" x-model="newMessage" @input="onChatInput()" @keydown.enter="sendChatMessage()" placeholder="Digite sua mensagem..." class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <button @click="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-1">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ACOMPANHAR MINHAS ENCOMENDAS -->
+    <div x-show="showTrackModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/80 backdrop-blur-sm">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
+            <div class="bg-slate-900 p-3.5 border-b border-slate-700 flex justify-between items-center">
+                <h4 class="font-bold text-sm text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-clipboard-list text-indigo-400"></i>
+                    <span>Minhas Encomendas</span>
+                </h4>
+                <button @click="closeTrack()" class="text-slate-400 hover:text-white p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="p-3.5 space-y-3 overflow-y-auto text-xs">
+                <div class="flex gap-2">
+                    <input type="tel" x-model="trackWhatsapp" @keydown.enter="loadMyEncomendas()" placeholder="Nº do pedido (ex: 02) ou seu WhatsApp" class="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    <button @click="loadMyEncomendas()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-xl font-bold flex items-center space-x-1">
+                        <i class="fa-solid fa-magnifying-glass"></i><span>Buscar</span>
+                    </button>
+                </div>
+                <p class="text-[10px] text-slate-400">Digite o número do pedido (ex: 02) ou o WhatsApp para buscar. Aqui aparecem somente as encomendas feitas na comanda ativa desta mesa. Encomendas de clientes anteriores nunca são exibidas. <span class="text-slate-600">(v6)</span></p>
+
+                <p x-show="trackLoading" class="text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Atualizando...</p>
+                <template x-if="!trackLoading && myEncomendas.length === 0">
+                    <p class="text-center text-slate-500 italic py-6" x-text="!hasActiveSession ? 'Nenhuma comanda ativa nesta mesa no momento.' : (String(trackWhatsapp || '').trim() ? 'Pedido não encontrado nesta comanda.' : 'Nenhuma encomenda encontrada nesta comanda.')"></p>
+                </template>
+
+                <template x-for="e in myEncomendas" :key="e.fbKey">
+                    <div class="bg-slate-900 border border-slate-700 rounded-xl p-3 space-y-2.5">
+                        <div class="flex justify-between items-center">
+                            <span class="font-mono font-extrabold text-emerald-400 text-sm" x-text="e.orderCode || 'Encomenda'"></span>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border" :class="statusClass(e.status)" x-text="e.status || 'Recebida'"></span>
+                        </div>
+
+                        <!-- Andamento -->
+                        <div x-show="(e.status || 'Recebida') !== 'Cancelada'" class="flex items-center">
+                            <template x-for="(st, i) in trackSteps" :key="st">
+                                <div class="flex items-center" :class="i < trackSteps.length - 1 ? 'flex-1' : ''">
+                                    <div class="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black shrink-0"
+                                         :class="stepIndex(e.status) >= i ? 'bg-emerald-500 text-slate-950' : 'bg-slate-700 text-slate-400'">
+                                        <i class="fa-solid fa-check"></i>
+                                    </div>
+                                    <div x-show="i < trackSteps.length - 1" class="h-0.5 flex-1 mx-1" :class="stepIndex(e.status) > i ? 'bg-emerald-500' : 'bg-slate-700'"></div>
+                                </div>
+                            </template>
+                        </div>
+                        <div x-show="(e.status || 'Recebida') !== 'Cancelada'" class="flex justify-between text-[9px] text-slate-400 -mt-1">
+                            <template x-for="st in trackSteps" :key="'l'+st"><span x-text="st"></span></template>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div><span class="text-slate-400 block">Retirada</span><strong class="text-amber-300" x-text="fmtDate(e.date) + ' às ' + (e.time || 'a combinar')"></strong></div>
+                            <div><span class="text-slate-400 block">Total</span><strong class="text-emerald-400" x-text="'R$ ' + Number(e.totalValue || 0).toFixed(2)"></strong></div>
+                        </div>
+
+                        <div class="bg-slate-950 border border-slate-800 rounded-lg p-2 space-y-1">
+                            <template x-if="e.itemsList && e.itemsList.length">
+                                <div class="divide-y divide-slate-800">
+                                    <template x-for="(it, ix) in e.itemsList" :key="ix">
+                                        <div class="flex justify-between py-1">
+                                            <span class="text-slate-200" x-text="it.qty + 'x ' + it.name"></span>
+                                            <span class="text-emerald-400 font-mono" x-text="'R$ ' + (it.qty * it.price).toFixed(2)"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                            <template x-if="!(e.itemsList && e.itemsList.length)">
+                                <p class="text-slate-300 italic" x-text="e.itemsDescription || 'Sem detalhes'"></p>
+                            </template>
+                        </div>
+                        <p x-show="e.updatedAt" class="text-[10px] text-amber-300"><i class="fa-solid fa-pen mr-1"></i><span x-text="'Pedido ajustado pela padaria em ' + e.updatedAt"></span></p>
+                        <p class="text-[10px] text-slate-500" x-text="'Enviado em ' + (e.createdAt || '')"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER -->
+    <div class="bg-slate-800 border border-slate-700 w-full max-w-md rounded-2xl p-5 shadow-2xl flex flex-col space-y-4">
+        
+        <!-- Cabeçalho & Seleção de Abas -->
+        <div class="flex flex-col space-y-3 pb-3 border-b border-slate-700">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center space-x-2.5">
+                    <div class="bg-emerald-500 text-slate-950 p-2 rounded-xl font-bold text-lg flex items-center justify-center w-10 h-10 shadow shrink-0">
+                        <i class="fa-solid fa-bread-slice"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-base text-white">SmartComanda Padaria</h3>
+                        <p class="text-xs text-emerald-400 font-bold" x-text="activeTab === 'comanda' ? `Mesa ${tableNumber}` : 'Produtos da Casa & Encomendas'"></p>
+                    </div>
+                </div>
+
+                <!-- Lado Direito: Badge Online + Botão Falar com Atendente logo abaixo -->
+                <div class="flex flex-col items-end space-y-1.5 shrink-0">
+                    <span class="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold flex items-center space-x-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>Online</span>
+                    </span>
+
+                    <!-- BOTÃO TALK TO ATTENDANT LOGO ABAIXO DO ONLINE -->
+                    <button @click="openChat()" class="relative bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all shadow flex items-center space-x-1 border border-indigo-400/30">
+                        <i class="fa-solid fa-comments"></i>
+                        <span>Falar com atendente</span>
+                        <span x-show="chatUnread > 0" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center font-black animate-bounce" x-text="chatUnread"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Botões de Alternância entre Comanda do Dia & Encomendas de Produção da Casa -->
+            <div class="grid grid-cols-2 gap-2 bg-slate-900 p-1 rounded-xl border border-slate-700">
+                <button @click="activeTab = 'comanda'" :class="activeTab === 'comanda' ? 'bg-emerald-600 text-white font-bold shadow' : 'text-slate-400 hover:text-white'" class="py-2 text-xs rounded-lg transition-all flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-receipt"></i>
+                    <span>Comanda da Mesa</span>
+                </button>
+                <button @click="activeTab = 'encomenda'" :class="activeTab === 'encomenda' ? 'bg-indigo-600 text-white font-bold shadow' : 'text-slate-400 hover:text-white'" class="py-2 text-xs rounded-lg transition-all flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-store"></i>
+                    <span>Produtos da Casa</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ABA 1: COMANDA DA MESA -->
+        <div x-show="activeTab === 'comanda'" class="space-y-4">
+            <!-- Info do Cliente e Tempo -->
+            <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-700/80 space-y-2 text-xs">
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Cliente Responsável:</span>
+                    <strong class="text-white font-bold text-sm" x-text="clientName || 'Aguardando identificação...'"></strong>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-slate-400">Tempo na Mesa:</span>
+                    <strong class="text-indigo-400 font-mono font-bold" x-text="satTime"></strong>
+                </div>
+                <div class="flex justify-between items-center pt-2 border-t border-slate-800">
+                    <span class="text-slate-400 font-bold">Total Atual da Conta:</span>
+                    <strong class="text-emerald-400 font-bold text-base" x-text="`R$ ${total.toFixed(2)}`"></strong>
+                </div>
+            </div>
+
+            <!-- Lista de Itens Consumidos -->
+            <div class="space-y-2">
+                <h4 class="text-xs font-bold text-slate-300 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-list-check text-indigo-400"></i>
+                    <span>Itens Lançados na Comanda:</span>
+                </h4>
+                <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 max-h-48 overflow-y-auto space-y-2 text-xs">
+                    <template x-if="items.length === 0">
+                        <p class="text-slate-500 text-center py-4 italic">Nenhum item lançado na mesa ainda.</p>
+                    </template>
+                    <template x-for="item in items" :key="item.id || item.name">
+                        <div class="flex justify-between items-center py-1.5 border-b border-slate-900 last:border-0">
+                            <div>
+                                <span class="font-medium text-white" x-text="`${item.qty}x ${item.name}`"></span>
+                                <span class="text-[10px] block px-1.5 py-0.5 rounded font-bold w-fit mt-0.5"
+                                      :class="{
+                                          'bg-amber-500/10 text-amber-400': item.status === 'Pendente',
+                                          'bg-blue-500/10 text-blue-400': item.status === 'Em Preparo',
+                                          'bg-emerald-500/20 text-emerald-400': item.status === 'Pronto'
+                                      }" x-text="item.status || 'Pendente'"></span>
+                            </div>
+                            <span class="text-emerald-400 font-bold font-mono" x-text="`R$ ${(item.qty * item.price).toFixed(2)}`"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Finalizar Pedido (mesmo efeito do botão "Finalizar & Gerar QR Code" do PC) -->
+            <template x-if="!finalized">
+                <div class="space-y-2">
+                    <button @click="finalizeOrder()" :disabled="finalizing" class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed text-white py-3 px-3 rounded-xl text-sm font-bold shadow-lg transition-all flex items-center justify-center space-x-2">
+                        <i class="fa-solid text-lg" :class="finalizing ? 'fa-spinner fa-spin' : 'fa-qrcode'"></i>
+                        <span x-text="finalizing ? 'Finalizando pedido...' : 'Finalizar Pedido'"></span>
+                    </button>
+                    <p x-show="finalizeNotice" x-cloak class="text-[11px] text-amber-400 text-center leading-snug" x-text="finalizeNotice"></p>
+                </div>
+            </template>
+            <template x-if="finalized">
+                <div class="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-xl text-center text-xs font-bold text-emerald-300 flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-circle-check text-base"></i>
+                    <span>Pedido finalizado. Obrigado pela visita!</span>
+                </div>
+            </template>
+
+            <!-- Avaliação da Experiência (libera após finalizar; uma única vez por comanda) -->
+            <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-700/80 space-y-3 text-xs">
+                <p class="font-bold text-amber-400 text-center flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-star"></i>
+                    <span>Avalie sua Experiência</span>
+                </p>
+
+                <p x-show="!finalized" x-cloak class="text-center text-slate-400 text-[11px] flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-lock"></i>
+                    <span>Finalize o pedido acima para liberar a avaliação.</span>
+                </p>
+                <p x-show="alreadyRated" x-cloak class="text-center text-emerald-400 font-bold text-[11px] flex items-center justify-center space-x-1.5">
+                    <i class="fa-solid fa-circle-check"></i>
+                    <span>Você já avaliou esta comanda. Obrigado!</span>
+                </p>
+
+                <fieldset :disabled="!canRate || submittingRating" :class="canRate ? '' : 'opacity-50'" class="space-y-3 min-w-0 border-0 p-0 m-0">
+                    <!-- Atendimento -->
+                    <div class="space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-slate-300">Qualidade do Atendimento:</span>
+                            <span class="text-amber-400 font-bold" x-text="`${ratingService} / 5`"></span>
+                        </div>
+                        <div class="flex justify-center space-x-1.5">
+                            <template x-for="star in [1,2,3,4,5]" :key="'srv-'+star">
+                                <button @click="ratingService = star" class="text-lg focus:outline-none transition-transform hover:scale-125">
+                                    <i class="fa-star" :class="star <= ratingService ? 'fa-solid text-amber-400' : 'fa-regular text-slate-600'"></i>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- Produtos -->
+                    <div class="space-y-1 pt-2 border-t border-slate-800">
+                        <div class="flex justify-between">
+                            <span class="text-slate-300">Qualidade dos Produtos:</span>
+                            <span class="text-amber-400 font-bold" x-text="`${ratingFood} / 5`"></span>
+                        </div>
+                        <div class="flex justify-center space-x-1.5">
+                            <template x-for="star in [1,2,3,4,5]" :key="'food-'+star">
+                                <button @click="ratingFood = star" class="text-lg focus:outline-none transition-transform hover:scale-125">
+                                    <i class="fa-star" :class="star <= ratingFood ? 'fa-solid text-amber-400' : 'fa-regular text-slate-600'"></i>
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="pt-1">
+                        <input type="text" x-model="feedbackComment" placeholder="Deixe seu comentário ou sugestão..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500">
+                    </div>
+
+                    <button @click="submitFeedback()" class="w-full bg-amber-600 hover:bg-amber-500 disabled:cursor-not-allowed text-white py-2.5 rounded-xl font-bold transition-all shadow"
+                            x-text="alreadyRated ? 'Avaliação já enviada' : (submittingRating ? 'Enviando...' : 'Enviar Avaliação')">
+                    </button>
+                </fieldset>
+            </div>
+        </div>
+
+        <!-- ABA 2: ENCOMENDAS DE PRODUÇÃO DA PADARIA -->
+        <div x-show="activeTab === 'encomenda'" class="space-y-4">
+            <div class="bg-indigo-500/10 border border-indigo-500/30 p-3 rounded-xl space-y-1">
+                <h4 class="text-xs font-bold text-indigo-300 flex items-center space-x-1.5">
+                    <i class="fa-solid fa-bread-slice text-indigo-400"></i>
+                    <span>Itens & Encomendas de Fabricação Própria</span>
+                </h4>
+                <p class="text-[11px] text-slate-300">Escolha os produtos artesanais da nossa padaria e agende sua encomenda.</p>
+            </div>
+
+            <button @click="openTrack()" class="relative w-full bg-slate-900 hover:bg-slate-700 border border-indigo-500/40 text-indigo-200 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2">
+                <i class="fa-solid fa-clipboard-list text-indigo-400"></i>
+                <span>Acompanhar minhas encomendas</span>
+                <span x-show="myEncCount > 0" x-cloak class="bg-indigo-500 text-white text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center font-black" x-text="myEncCount"></span>
+            </button>
+
+            <!-- Seleção por Categoria de Padaria -->
+            <div class="flex space-x-1.5 overflow-x-auto pb-1 text-xs">
+                <template x-for="cat in padariaCategorias" :key="cat">
+                    <button @click="selectedPadariaCat = cat" 
+                            :class="selectedPadariaCat === cat ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-900 text-slate-400 border border-slate-700 hover:text-white'"
+                            class="px-3 py-1.5 rounded-xl shrink-0 transition-all text-[11px]"
+                            x-text="cat"></button>
+                </template>
+            </div>
+
+            <!-- Lista de Produtos da Casa com Contador -->
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 max-h-56 overflow-y-auto space-y-2 text-xs">
+                <template x-for="prod in filteredPadariaProducts" :key="prod.id">
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900 border border-slate-800/80">
+                        <div class="flex-1 pr-2">
+                            <span class="font-bold text-white block" x-text="prod.name"></span>
+                            <span class="text-[10px] text-slate-400 block" x-text="prod.desc"></span>
+                            <span class="text-emerald-400 font-bold font-mono text-xs block mt-0.5" x-text="`R$ ${prod.price.toFixed(2)}`"></span>
+                        </div>
+                        <div class="flex items-center space-x-2 shrink-0 bg-slate-950 p-1 rounded-lg border border-slate-800">
+                            <button @click="changePadariaQty(prod.id, -1)" class="w-6 h-6 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs flex items-center justify-center">-</button>
+                            <span class="w-5 text-center font-bold text-indigo-400" x-text="getPadariaQty(prod.id)"></span>
+                            <button @click="changePadariaQty(prod.id, 1)" class="w-6 h-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center justify-center">+</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Resumo do Carrinho de Encomenda -->
+            <div class="bg-slate-900 p-3 rounded-xl border border-slate-700/80 space-y-3 text-xs">
+                <div class="flex justify-between items-center font-bold">
+                    <span class="text-slate-300">Total Selecionado na Encomenda:</span>
+                    <span class="text-emerald-400 font-mono text-sm" x-text="`R$ ${totalPadariaEncomenda.toFixed(2)}`"></span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 mb-1 text-[11px]">Seu Nome *</label>
+                        <input type="text" x-model="encName" placeholder="Ex: João Silva" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1 text-[11px]">Seu WhatsApp *</label>
+                        <input type="text" x-model="encWhatsapp" placeholder="Ex: 11999999999" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-slate-400 mb-1 text-[11px]">Data Retirada *</label>
+                        <input type="date" x-model="encDate" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-slate-400 mb-1 text-[11px]">Horário Retirada *</label>
+                        <input type="time" x-model="encTime" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-slate-400 mb-1 text-[11px]">Observações ou Detalhes Especiais</label>
+                    <input type="text" x-model="encDescription" placeholder="Ex: Fatiar os pães, bolo sem lactose..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-indigo-500">
+                </div>
+
+                <button @click="submitPadariaEncomenda()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-bold transition-all shadow flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>Confirmar Encomenda para o Forno</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Instagram -->
+        <div class="bg-gradient-to-r from-pink-600/20 via-purple-600/20 to-indigo-600/20 p-2.5 rounded-xl border border-pink-500/30 text-center space-y-1">
+            <p class="text-xs font-bold text-white flex items-center justify-center space-x-1.5">
+                <i class="fa-brands fa-instagram text-pink-400 text-sm"></i>
+                <span>Siga-nos no Instagram</span>
+            </p>
+            <a href="https://www.instagram.com/compreagoranovidades/" target="_blank" class="inline-flex items-center space-x-1.5 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold px-3 py-1 rounded-lg text-xs shadow hover:opacity-90 transition-all">
+                <i class="fa-brands fa-instagram"></i>
+                <span>@compreagoranovidades</span>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // ===== TEMPO REAL: Firebase Realtime Database via SSE (push instantâneo), com fallback automático para polling =====
+        const SC_DB = 'https://smartcomanda-df58e-default-rtdb.firebaseio.com';
+        // ===== SEGURANÇA: Firebase Authentication (login via REST, sem biblioteca extra) =====
+        // Cole aqui a "Chave de API da Web" do projeto (Firebase > Configurações do projeto > Geral).
+        // Enquanto estiver vazia, o sistema funciona no modo antigo (sem login no Firebase) - use só durante a migração.
+        const SC_API_KEY = 'AIzaSyDOq_Db9C3dr5rVbBy1J3Ed6TX8_7J2jus';
+        const _scRawFetch = window.fetch.bind(window);
+        const SC_AUTH = (function () {
+            const enabled = !!SC_API_KEY;
+            let st = null, kind = 'staff', storeKey = 'sc_auth_staff', refreshing = null, anonBusy = null, lostCb = null;
+            const IDT = 'https://identitytoolkit.googleapis.com/v1/accounts:';
+            const load = () => { try { st = JSON.parse(localStorage.getItem(storeKey) || 'null'); } catch (e) { st = null; } };
+            const save = () => { try { if (st) localStorage.setItem(storeKey, JSON.stringify(st)); else localStorage.removeItem(storeKey); } catch (e) {} };
+            const expAt = (s) => Date.now() + (parseInt(s || '3600', 10) - 120) * 1000;
+            async function call(method, body) {
+                const r = await _scRawFetch(IDT + method + '?key=' + encodeURIComponent(SC_API_KEY), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error((d.error && d.error.message) || ('HTTP ' + r.status));
+                return d;
+            }
+            async function signInAnon() {
+                if (anonBusy) return anonBusy;
+                anonBusy = (async () => {
+                    try { const d = await call('signUp', { returnSecureToken: true }); st = { idToken: d.idToken, refreshToken: d.refreshToken, uid: d.localId, email: '', expiresAt: expAt(d.expiresIn) }; save(); }
+                    finally { anonBusy = null; }
+                })();
+                return anonBusy;
+            }
+            async function refresh() {
+                const r = await _scRawFetch('https://securetoken.googleapis.com/v1/token?key=' + encodeURIComponent(SC_API_KEY), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(st.refreshToken) });
+                const d = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error((d.error && d.error.message) || ('HTTP ' + r.status));
+                st = { idToken: d.id_token, refreshToken: d.refresh_token, uid: d.user_id, email: st.email || '', expiresAt: expAt(d.expires_in) };
+                save();
+            }
+            async function getToken() {
+                if (!enabled) return null;
+                if (!st) load();
+                if (!st) { if (kind === 'anon') { try { await signInAnon(); } catch (e) { return null; } } else return null; }
+                if (st && Date.now() >= st.expiresAt) {
+                    if (!refreshing) refreshing = (async () => {
+                        try { await refresh(); }
+                        catch (e) {
+                            // só descarta o login se o servidor recusou de verdade (sem internet = mantém e tenta de novo depois)
+                            if (/TOKEN_EXPIRED|USER_DISABLED|USER_NOT_FOUND|INVALID_REFRESH_TOKEN|MISSING_REFRESH_TOKEN/.test(String((e && e.message) || ''))) {
+                                st = null; save();
+                                if (kind === 'anon') { try { await signInAnon(); } catch (e2) {} } else if (lostCb) lostCb();
+                            }
+                        } finally { refreshing = null; }
+                    })();
+                    await refreshing;
+                }
+                return st ? st.idToken : null;
+            }
+            return {
+                enabled,
+                setKind(k) { kind = k; storeKey = (k === 'anon') ? 'sc_auth_anon' : 'sc_auth_staff'; st = null; },
+                onLost(cb) { lostCb = cb; },
+                getToken,
+                invalidate() { if (st) st.expiresAt = 0; },
+                hasSession() { if (!st) load(); return !!st; },
+                uid() { if (!st) load(); return st ? st.uid : ''; },
+                email() { if (!st) load(); return st ? (st.email || '') : ''; },
+                async signInEmail(email, password) {
+                    const d = await call('signInWithPassword', { email: email, password: password, returnSecureToken: true });
+                    st = { idToken: d.idToken, refreshToken: d.refreshToken, uid: d.localId, email: d.email || email, expiresAt: expAt(d.expiresIn) };
+                    save(); return st;
+                },
+                async createUser(email, password) { const d = await call('signUp', { email: email, password: password, returnSecureToken: true }); return { uid: d.localId }; },
+                async changePassword(newPass) {
+                    const tok = await getToken();
+                    const d = await call('update', { idToken: tok, password: newPass, returnSecureToken: true });
+                    st = Object.assign({}, st, { idToken: d.idToken, refreshToken: d.refreshToken, expiresAt: expAt(d.expiresIn) });
+                    save();
+                },
+                async sendReset(email) { await call('sendOobCode', { requestType: 'PASSWORD_RESET', email: email }); },
+                signOut() { st = null; save(); },
+                friendly(e) {
+                    const m = String((e && e.message) || e || '');
+                    if (/EMAIL_NOT_FOUND|INVALID_PASSWORD|INVALID_LOGIN_CREDENTIALS/.test(m)) return 'E-mail ou senha inválidos.';
+                    if (/USER_DISABLED/.test(m)) return 'Este usuário está desativado.';
+                    if (/TOO_MANY_ATTEMPTS/.test(m)) return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+                    if (/EMAIL_EXISTS/.test(m)) return 'Este e-mail já possui uma conta no Firebase.';
+                    if (/WEAK_PASSWORD/.test(m)) return 'A senha precisa ter pelo menos 6 caracteres.';
+                    if (/INVALID_EMAIL|MISSING_EMAIL/.test(m)) return 'E-mail inválido.';
+                    if (/OPERATION_NOT_ALLOWED|CONFIGURATION_NOT_FOUND/.test(m)) return 'O login por e-mail/senha ainda não está ativado no Firebase.';
+                    if (/API key not valid|API_KEY_INVALID/i.test(m)) return 'Chave de API do Firebase inválida (SC_API_KEY).';
+                    if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Sem conexão com a internet.';
+                    return 'Não foi possível concluir (' + m + ').';
+                }
+            };
+        })();
+        // toda chamada ao banco passa a levar o token de login (?auth=...)
+        window.fetch = function (input, init) {
+            const url = typeof input === 'string' ? input : ((input && input.url) || '');
+            if (!SC_AUTH.enabled || url.indexOf(SC_DB) !== 0 || /[?&]auth=/.test(url)) return _scRawFetch(input, init);
+            return SC_AUTH.getToken().then(function (tok) {
+                return _scRawFetch(tok ? url + (url.indexOf('?') > -1 ? '&' : '?') + 'auth=' + encodeURIComponent(tok) : url, init);
+            });
+        };
+
+        function scLive(path, onData, pollMs) {
+            pollMs = pollMs || 3000;
+            const url = SC_DB + '/' + path + '.json';
+            let data = null, es = null, timer = null, closed = false, mode = 'connecting', retry = null;
+
+            const emit = () => {
+                try { onData(data === null ? null : JSON.parse(JSON.stringify(data)), mode); } catch (e) { console.error(e); }
+            };
+            // aplica um valor em um caminho (ex.: "/mesa_1/-Nabc") na cópia local dos dados
+            const setIn = (p, val) => {
+                const parts = String(p || '/').split('/').filter(Boolean);
+                if (!parts.length) { data = (val === undefined ? null : val); return; }
+                if (data === null || typeof data !== 'object') data = {};
+                let node = data;
+                for (let i = 0; i < parts.length - 1; i++) {
+                    if (node[parts[i]] === null || node[parts[i]] === undefined || typeof node[parts[i]] !== 'object') node[parts[i]] = {};
+                    node = node[parts[i]];
+                }
+                const last = parts[parts.length - 1];
+                if (val === null || val === undefined) delete node[last]; else node[last] = val;
+            };
+            const poll = async () => {
+                try {
+                    const r = await fetch(url, { cache: 'no-store' });   // (o token é anexado automaticamente)
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    data = await r.json();
+                    mode = 'polling';
+                } catch (e) { mode = 'offline'; }
+                if (!closed) emit();
+            };
+            const startPoll = () => { if (timer || closed) return; poll(); timer = setInterval(poll, pollMs); };
+            const stopPoll = () => { if (timer) { clearInterval(timer); timer = null; } };
+            const reconnectLater = (ms) => { if (retry || closed) return; retry = setTimeout(() => { retry = null; connect(); }, ms); };
+
+            const connect = async () => {
+                if (closed) return;
+                try {
+                    if (typeof EventSource === 'undefined') throw new Error('sem SSE');
+                    const tok = await SC_AUTH.getToken();   // token novo a cada (re)conexão
+                    if (closed) return;
+                    if (es) { try { es.close(); } catch (e) {} }
+                    es = new EventSource(tok ? url + '?auth=' + encodeURIComponent(tok) : url);
+                    es.addEventListener('open', () => { mode = 'live'; stopPoll(); });
+                    es.addEventListener('put', (ev) => {
+                        try { const m = JSON.parse(ev.data); setIn(m.path, m.data); mode = 'live'; emit(); } catch (e) {}
+                    });
+                    es.addEventListener('patch', (ev) => {
+                        try {
+                            const m = JSON.parse(ev.data);
+                            const base = String(m.path || '/').replace(/\/$/, '');
+                            Object.keys(m.data || {}).forEach(k => setIn(base + '/' + k, m.data[k]));
+                            mode = 'live'; emit();
+                        } catch (e) {}
+                    });
+                    // token venceu: reabre com um token renovado
+                    es.addEventListener('auth_revoked', () => { try { es.close(); } catch (e) {} SC_AUTH.invalidate(); startPoll(); reconnectLater(1500); });
+                    // sem permissão (ainda): continua por polling e tenta o tempo real de novo mais tarde
+                    es.addEventListener('cancel', () => { try { es.close(); } catch (e) {} startPoll(); reconnectLater(20000); });
+                    es.addEventListener('error', () => {
+                        if (closed) return;
+                        mode = 'reconnecting'; startPoll();
+                        if (es && es.readyState === 2) reconnectLater(5000);
+                    });
+                } catch (e) { startPoll(); }
+            };
+            connect();
+
+            return {
+                close() { closed = true; stopPoll(); if (retry) clearTimeout(retry); if (es) { try { es.close(); } catch (e) {} } },
+                get mode() { return mode; }
+            };
+        }
+        SC_AUTH.setKind('anon');
+
+        function clienteApp() {
+            return {
+                activeTab: 'comanda',
+                tableNumber: 1,
+                clientName: 'Carregando...',
+                satTime: '00:00',
+                total: 0,
+                items: [],
+                ratingService: 5,
+                ratingFood: 5,
+                feedbackComment: '',
+                // Finalização pelo celular + avaliação única
+                finalizing: false,
+                finalizeNotice: '',
+                // Acompanhar encomendas
+                showTrackModal: false,
+                trackWhatsapp: '',
+                trackLoading: false,
+                myEncomendas: [],
+                myEncCount: 0,
+                trackTimer: null,
+                trackSteps: ['Recebida', 'Em produção', 'Pronta', 'Entregue'],
+                sid: '',               // identificador da sessão (comanda) - vem da mesa ou do QR Code
+                urlSid: '',            // sessão do QR/link que abriu esta página
+                tableWa: '',           // WhatsApp (só dígitos) do cliente ativo cadastrado na mesa
+                tableChecked: false,   // já consultou a mesa pelo menos uma vez
+                alreadyRated: false,
+                submittingRating: false,
+                _ratedChecked: '',
+                showSuccessNotification: false,
+                notificationText: 'Pedido finalizado com sucesso!',
+                notificationIcon: 'fa-circle-check',
+                isFinalized: false,
+                tableOpen: false,     // comanda da mesa aberta agora (atualiza sozinho, sem recarregar a página)
+                sessionEnded: false,  // a comanda deste cliente já foi finalizada nesta página
+                previousStatus: null,
+                hasNotifiedFinalized: false, // Flag rigorosa para exibir a notificação APENAS UMA VEZ na transição do Windows
+                
+                // Chat em tempo real com o PC da loja
+                showChatModal: false,
+                newMessage: '',
+                chatRaw: {},
+                chatMeta: {},
+                chatPending: [],
+                chatNow: Date.now(),
+                chatInitialized: false,
+                metaInitialized: false,
+                knownAttendantKey: null,
+                attSeen: { ping: null, at: 0 },
+                attTypingSeen: { val: 0, at: 0 },
+                lastTypingSent: 0,
+                chipSentAt: {},
+                chatNotice: '',
+                chatChips: [
+                    { label: 'Chamar garçom', icon: 'fa-bell-concierge', text: 'Preciso de ajuda na mesa, por favor.' },
+                    { label: 'Pedir a conta', icon: 'fa-receipt', text: 'Gostaria de pedir a conta, por favor.' },
+                    { label: 'Dúvida no pedido', icon: 'fa-circle-question', text: 'Tenho uma dúvida sobre o meu pedido.' }
+                ],
+
+                // Produtos da Casa / Padaria
+                selectedPadariaCat: 'Todos',
+                padariaCategorias: ['Todos', 'Pães & Broas', 'Bolos & Confeitaria', 'Salgados & Tortas', 'Kits & Festas'],
+                padariaProdutos: [
+                    { id: 101, name: 'Pão Francês Tradicional (kg)', price: 18.90, category: 'Pães & Broas', desc: 'Crocante por fora, macio por dentro.' },
+                    { id: 102, name: 'Pão de Queijo Mineiro (Unidade Grande)', price: 4.50, category: 'Pães & Broas', desc: 'Com queijo canastra legítimo.' },
+                    { id: 103, name: 'Croissant Folhado com Manteiga', price: 9.50, category: 'Pães & Broas', desc: 'Massa folhada artesanal de receita francesa.' },
+                    { id: 104, name: 'Baguete recheada com Presunto e Queijo', price: 16.00, category: 'Pães & Broas', desc: 'Baguete artesanal recheada e assada.' },
+                    { id: 105, name: 'Bolo Caseiro de Fubá com Goiabada', price: 28.00, category: 'Bolos & Confeitaria', desc: 'Bolo inteiro quentinho do forno.' },
+                    { id: 106, name: 'Torta Holandesa Cremosa (Inteira)', price: 75.00, category: 'Bolos & Confeitaria', desc: 'Creme leve com cobertura de chocolate e biscoitos.' },
+                    { id: 107, name: 'Sonho de Creme de Baunilha', price: 6.50, category: 'Bolos & Confeitaria', desc: 'Fofinho e polvilhado com açúcar de confeiteiro.' },
+                    { id: 108, name: 'Carolina Recheada com Doce de Leite (500g)', price: 32.00, category: 'Bolos & Confeitaria', desc: 'Massa choux coberta com chocolate.' },
+                    { id: 109, name: 'Coxinha de Frango com Catupiry (Cento de Salgados)', price: 85.00, category: 'Salgados & Tortas', desc: '100 mini salgados fritos na hora.' },
+                    { id: 110, name: 'Torta Inteira de Frango com Requeijão', price: 68.00, category: 'Salgados & Tortas', desc: 'Massa podre artesanal que derrete na boca.' },
+                    { id: 111, name: 'Empadão de Palmito Especial', price: 62.00, category: 'Salgados & Tortas', desc: 'Recheio cremoso e temperado.' },
+                    { id: 112, name: 'Kit Café da Manhã Família', price: 120.00, category: 'Kits & Festas', desc: 'Pães variados, bolo, frios, geleia e suco de laranja 1L.' },
+                    { id: 113, name: 'Pão de Metro Peito de Peru e Queijo Branco', price: 89.00, category: 'Kits & Festas', desc: 'Serve até 10 pessoas, cortado e decorado.' }
+                ],
+                cartPadaria: {},
+
+                // Campos da encomenda
+                encName: '',
+                encWhatsapp: '',
+                encDate: '',
+                encTime: '',
+                encDescription: '',
+
+                async init() {
+                    if (this._started) return; // Alpine chama init() sozinho e o x-init chama de novo
+                    this._started = true;
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const mesaParam = urlParams.get('mesa');
+                    if(mesaParam) {
+                        this.tableNumber = parseInt(mesaParam);
+                    }
+
+                    if(urlParams.get('cliente')) {
+                        this.clientName = decodeURIComponent(urlParams.get('cliente'));
+                        this.encName = this.clientName;
+                    }
+                    if(urlParams.get('tempo')) this.satTime = decodeURIComponent(urlParams.get('tempo'));
+                    if(urlParams.get('total')) this.total = parseFloat(urlParams.get('total')) || 0;
+                    if(urlParams.get('sid')) {
+                        this.urlSid = urlParams.get('sid');   // sessão (cliente) para a qual este link/QR foi gerado
+                        this.sid = urlParams.get('sid');
+                        try { localStorage.setItem('sc_sid_mesa_' + this.tableNumber, this.sid); } catch(e) {}
+                    }
+                    if (!this.sid) { try { this.sid = localStorage.getItem('sc_sid_mesa_' + this.tableNumber) || ''; this.urlSid = this.sid; } catch(e) {} }
+                    // As encomendas agora são individuais por comanda/cliente: apaga a lista global antiga (compartilhada entre clientes)
+                    try { localStorage.removeItem('sc_my_enc'); localStorage.removeItem('sc_my_whatsapp'); } catch(e) {}
+                    this.myEncCount = this.myEncKeys().length;
+                    if(urlParams.get('itens')) {
+                        try { const it = JSON.parse(urlParams.get('itens')); if (Array.isArray(it)) this.items = it; } catch(e) {}
+                    }
+
+                    // Data padrão amanhã
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    this.encDate = tomorrow.toISOString().split('T')[0];
+                    this.encTime = "08:00";
+
+                    // Buscar dados do Firebase
+                    await this.fetchTableData();
+                    setInterval(() => this.fetchTableData(), 3000);
+
+                    // Chat em tempo real (push via SSE; cai para polling sozinho se necessário)
+                    scLive(`chats/mesa_${this.tableNumber}`, (data) => {
+                        this.chatRaw = data || {};
+                        this.chatAfterUpdate();
+                    }, 2500);
+                    scLive(`chat_meta/mesa_${this.tableNumber}`, (data) => {
+                        const meta = data || {};
+                        const tv = meta.staffTyping || 0;
+                        if (tv !== this.attTypingSeen.val) this.attTypingSeen = { val: tv, at: this.metaInitialized ? Date.now() : 0 };
+                        this.metaInitialized = true;
+                        this.chatMeta = meta;
+                        if (this.showChatModal) this.chatMarkRead();
+                    }, 2500);
+                    // Presença da equipe (PC da loja logado e conectado)
+                    scLive('staff_presence', (data) => {
+                        const ping = data && data.ping ? data.ping : 0;
+                        if (ping !== this.attSeen.ping) this.attSeen = { ping: ping, at: this.attSeen.ping === null ? 0 : Date.now() };
+                    }, 5000);
+                    setInterval(() => { this.chatNow = Date.now(); }, 2000);
+
+                    // Sinal de vida: a loja vê "Acompanhando a comanda agora" enquanto este celular estiver com o app aberto
+                    const ping = () => { if (document.visibilityState === 'visible' && !this.chatClosed) this.patchMeta({ clientPing: Date.now() }); };
+                    ping();
+                    setInterval(ping, 8000);
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'visible') { ping(); if (this.showChatModal) this.chatMarkRead(); }
+                    });
+                },
+
+                get filteredPadariaProducts() {
+                    if(this.selectedPadariaCat === 'Todos') return this.padariaProdutos;
+                    return this.padariaProdutos.filter(p => p.category === this.selectedPadariaCat);
+                },
+
+                getPadariaQty(id) {
+                    return this.cartPadaria[id] || 0;
+                },
+
+                changePadariaQty(id, delta) {
+                    const current = this.cartPadaria[id] || 0;
+                    const next = Math.max(0, current + delta);
+                    if(next === 0) {
+                        delete this.cartPadaria[id];
+                    } else {
+                        this.cartPadaria[id] = next;
+                    }
+                    this.cartPadaria = {...this.cartPadaria};
+                },
+
+                get totalPadariaEncomenda() {
+                    let sum = 0;
+                    Object.keys(this.cartPadaria).forEach(idStr => {
+                        const id = parseInt(idStr);
+                        const prod = this.padariaProdutos.find(p => p.id === id);
+                        if(prod) {
+                            sum += prod.price * this.cartPadaria[idStr];
+                        }
+                    });
+                    return sum;
+                },
+
+                triggerSuccessNotification(msg = 'Pedido finalizado com sucesso!', icon = 'fa-circle-check') {
+                    this.notificationText = msg;
+                    this.notificationIcon = icon;
+                    this.showSuccessNotification = true;
+                    setTimeout(() => {
+                        this.showSuccessNotification = false;
+                    }, 7000);
+                },
+
+                // Lê SÓ a comanda deste cliente: sessão -> (entra) -> mesa publicada para esta sessão.
+                // O banco não deixa o cliente listar mesas nem ver a comanda de outra sessão.
+                async fetchTableData() {
+                    try {
+                        if (!this.sid) { this.tableChecked = true; return; }     // sem o QR/sessão não há comanda para mostrar
+                        const rs = await fetch(`${SC_DB}/sessoes/${encodeURIComponent(this.sid)}.json`, { cache: 'no-store' });
+                        if (!rs.ok) return;                                       // rede/permissão: tenta de novo no próximo ciclo
+                        const sess = await rs.json();
+                        let tableFound = null;
+                        if (!sess) {                                              // link de uma sessão que não existe mais
+                            this.endSessionLocal(); this.tableChecked = true; return;
+                        }
+                        if (sess.status === 'ocupada') {
+                            if (!this._joined) {                                  // entra na comanda: libera leitura/escrita só desta sessão para este login
+                                const uid = SC_AUTH.uid() || 'anon';
+                                const j = await fetch(`${SC_DB}/acessos/${encodeURIComponent(this.sid)}/${uid}.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: 'true' });
+                                this._joined = j.ok;
+                            }
+                            const rt = await fetch(`${SC_DB}/mesa_publica/mesa_${this.tableNumber}.json`, { cache: 'no-store' });
+                            if (rt.status === 401 || rt.status === 403) {         // a mesa agora é de outro cliente
+                                this.endSessionLocal(); this.previousStatus = 'ocupada'; this.tableChecked = true; return;
+                            }
+                            if (!rt.ok) return;
+                            tableFound = await rt.json();
+                            if (!tableFound || tableFound.sessionId !== this.sid) return;
+                        } else {
+                            tableFound = { number: this.tableNumber, status: 'livre' };   // sessão encerrada
+                        }
+
+                        if(this.previousStatus === 'ocupada' && tableFound.status === 'livre') {
+                            this.sessionEnded = true; // comanda deste cliente foi encerrada
+                            this.resetEncomendaSession();
+                            if (this.finalizing) {    // foi este celular que pediu para finalizar
+                                this.finalizing = false;
+                                this.finalizeNotice = '';
+                                this.triggerSuccessNotification('Pedido finalizado com sucesso!');
+                            }
+                        }
+                        this.tableOpen = (tableFound.status === 'ocupada');
+                        this.previousStatus = tableFound.status;
+                        if (tableFound.status === 'ocupada') {
+                            this.myEncCount = this.myEncKeys().length;
+                            try { localStorage.setItem('sc_sid_mesa_' + this.tableNumber, this.sid); } catch(e) {}
+                        }
+                        this.tableChecked = true;
+                        if (this.finalized && this._ratedChecked !== this.ratingSid) {
+                            this._ratedChecked = this.ratingSid;
+                            this.refreshRatedState();
+                        }
+                        this.tableWa = tableFound.status === 'ocupada' ? String(tableFound.whatsapp || '').replace(/\D/g, '') : '';
+                        if(tableFound.status === 'ocupada') {
+                            this.clientName = tableFound.client || 'Mesa Ocupada';
+                            let totalSec = tableFound.satSeconds || 0;
+                            let m = Math.floor(totalSec / 60);
+                            let s = totalSec % 60;
+                            this.satTime = `${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                            this.total = tableFound.total || 0;
+                            this.items = tableFound.items || [];
+                        }
+                    } catch(e) {}
+                },
+
+                // ===== Chat em tempo real =====
+                get chatMessages() {
+                    const list = [];
+                    const seen = {};
+                    Object.keys(this.chatRaw || {}).sort().forEach(k => {
+                        const m = this.chatRaw[k];
+                        if (m && typeof m === 'object' && m.text) { list.push(Object.assign({}, m, { id: k })); seen[k] = true; }
+                    });
+                    this.chatPending.forEach(p => {
+                        if (p.serverId && seen[p.serverId]) return;
+                        list.push(Object.assign({}, p.payload, { id: p.serverId || p.localId, localId: p.localId, pending: p.pending, failed: p.failed }));
+                    });
+                    return list;
+                },
+                get chatUnread() {
+                    if (this.showChatModal) return 0;
+                    const readUpTo = this.chatMeta.clientReadUpTo || 0;
+                    return this.chatMessages.filter(m => m.sender !== 'cliente' && !m.pending && (m.timestamp || 0) > readUpTo).length;
+                },
+                get chatClosed() { return this.sessionEnded || !this.tableOpen; },
+                get attendantOnline() { return (this.chatNow - this.attSeen.at) < 25000; },
+                get attendantTyping() { return (this.chatNow - this.attTypingSeen.at) < 5000; },
+                isReadByStaff(msg) { return (msg.timestamp || 0) <= (this.chatMeta.staffReadUpTo || 0); },
+
+                openChat() {
+                    this.fetchTableData();
+                    this.showChatModal = true;
+                    this.showSuccessNotification = false;
+                    this.$nextTick(() => { this.chatMarkRead(); this.chatScrollBottom(true); });
+                },
+                chatScrollBottom(force) {
+                    const box = document.getElementById('chatMessagesBox');
+                    if (!box) return;
+                    if (force || (box.scrollHeight - box.scrollTop - box.clientHeight) < 120) box.scrollTop = box.scrollHeight;
+                },
+                patchMeta(obj) {
+                    if (this.chatClosed) return;
+                    fetch(`${SC_DB}/chat_meta/mesa_${this.tableNumber}.json`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj)
+                    }).catch(() => {});
+                },
+                chatMarkRead() {
+                    if (document.visibilityState !== 'visible') return;
+                    let max = 0;
+                    Object.keys(this.chatRaw || {}).forEach(k => {
+                        const m = this.chatRaw[k];
+                        if (m && m.sender !== 'cliente' && (m.timestamp || 0) > max) max = m.timestamp;
+                    });
+                    if (max === 0 || (this.chatMeta.clientReadUpTo || 0) >= max) return;
+                    this.chatMeta = Object.assign({}, this.chatMeta, { clientReadUpTo: max });
+                    this.patchMeta({ clientReadUpTo: max });
+                },
+                chatAfterUpdate() {
+                    // descarta mensagens "pendentes" que o servidor já confirmou
+                    if (this.chatPending.some(p => p.serverId && this.chatRaw[p.serverId])) {
+                        this.chatPending = this.chatPending.filter(p => !(p.serverId && this.chatRaw[p.serverId]));
+                    }
+                    // chegou resposta nova da equipe? (a primeira carga não avisa)
+                    const keys = Object.keys(this.chatRaw).sort();
+                    let lastKey = null;
+                    for (let i = keys.length - 1; i >= 0; i--) {
+                        const m = this.chatRaw[keys[i]];
+                        if (m && m.sender !== 'cliente') { lastKey = keys[i]; break; }
+                    }
+                    if (lastKey && lastKey !== this.knownAttendantKey) {
+                        if (this.chatInitialized && !this.showChatModal) {
+                            this.triggerSuccessNotification('Atendente: ' + String(this.chatRaw[lastKey].text).slice(0, 60), 'fa-comment-dots');
+                            if (navigator.vibrate) { try { navigator.vibrate([120, 60, 120]); } catch (e) {} }
+                        }
+                        this.knownAttendantKey = lastKey;
+                    }
+                    this.chatInitialized = true;
+                    if (this.showChatModal) {
+                        this.chatMarkRead();
+                        this.$nextTick(() => this.chatScrollBottom(false));
+                    }
+                },
+                onChatInput() {
+                    if (!this.newMessage) return;
+                    const now = Date.now();
+                    if (now - this.lastTypingSent < 2500) return;
+                    this.lastTypingSent = now;
+                    this.patchMeta({ clientTyping: now });
+                },
+                sendChip(chip) {
+                    const last = this.chipSentAt[chip.label] || 0;
+                    if (Date.now() - last < 15000) {
+                        this.chatNotice = 'Seu chamado já foi enviado. Aguarde um instante, por favor.';
+                        setTimeout(() => { this.chatNotice = ''; }, 4000);
+                        return;
+                    }
+                    this.chipSentAt[chip.label] = Date.now();
+                    this.sendChatMessage(chip.text, 'chamado');
+                },
+                async sendChatMessage(textOverride, kind) {
+                    if (this.chatClosed) return;
+                    const text = (typeof textOverride === 'string' ? textOverride : this.newMessage).trim();
+                    if (!text) return;
+                    if (typeof textOverride !== 'string') this.newMessage = '';
+                    const ts = Date.now();
+                    const payload = {
+                        sender: 'cliente',
+                        clientName: this.clientName || 'Cliente Mesa ' + this.tableNumber,
+                        table: this.tableNumber,
+                        text: text,
+                        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                        timestamp: ts
+                    };
+                    if (kind) payload.kind = kind;
+                    const localId = 'p' + ts + Math.random().toString(36).slice(2, 6);
+                    this.chatPending.push({ localId: localId, payload: payload, pending: true, failed: false, serverId: null });
+                    this.$nextTick(() => this.chatScrollBottom(true));
+                    await this.postPending(localId);
+                },
+                retryMessage(localId) { this.postPending(localId); },
+                async postPending(localId) {
+                    const p0 = this.chatPending.find(x => x.localId === localId);
+                    if (!p0) return;
+                    p0.pending = true; p0.failed = false;
+                    try {
+                        const res = await fetch(`${SC_DB}/chats/mesa_${this.tableNumber}.json`, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(p0.payload)
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        const j = await res.json();
+                        const q = this.chatPending.find(x => x.localId === localId);
+                        if (q) {
+                            if (j && j.name) { q.serverId = j.name; q.pending = false; }
+                            else this.chatPending = this.chatPending.filter(x => x.localId !== localId);
+                        }
+                    } catch (e) {
+                        const q = this.chatPending.find(x => x.localId === localId);
+                        if (q) { q.pending = false; q.failed = true; }
+                    }
+                },
+
+                // ===== Finalização do pedido pelo celular =====
+                get finalized() { return this.sessionEnded || (this.tableChecked && !this.tableOpen); },
+                get canRate() { return this.finalized && !this.alreadyRated; },
+                get ratingSid() {
+                    if (this.sid) return this.sid;
+                    let s = '';
+                    try { s = localStorage.getItem('sc_sid_mesa_' + this.tableNumber) || ''; } catch(e) {}
+                    if (s) return s;
+                    // link antigo sem identificador: gera uma chave estável com mesa + cliente + total + tempo
+                    const raw = this.tableNumber + '|' + (this.clientName || '') + '|' + Number(this.total || 0).toFixed(2) + '|' + this.satTime;
+                    let hsh = 5381;
+                    for (let i = 0; i < raw.length; i++) hsh = ((hsh << 5) + hsh + raw.charCodeAt(i)) | 0;
+                    return 'x' + this.tableNumber + '_' + Math.abs(hsh).toString(36);
+                },
+
+                async finalizeOrder() {
+                    if (this.finalizing || this.finalized) return;
+                    const pendentes = (this.items || []).some(i => i.status && i.status !== 'Pronto');
+                    const msg = pendentes
+                        ? 'Ainda há itens em preparo na sua comanda. Deseja finalizar o pedido mesmo assim?'
+                        : 'Deseja finalizar seu pedido e fechar a comanda da Mesa ' + this.tableNumber + '?';
+                    if (!confirm(msg)) return;
+                    this.finalizing = true;
+                    this.finalizeNotice = '';
+                    const req = {
+                        mesa: this.tableNumber,
+                        sid: this.sid || '',
+                        client: this.clientName || '',
+                        total: this.total || 0,
+                        ts: Date.now(),
+                        source: 'celular'
+                    };
+                    try {
+                        // o PC da loja recebe este pedido e executa o mesmo "Finalizar" do botão dele
+                        const res = await fetch(`${SC_DB}/finalizar_pedidos/mesa_${this.tableNumber}.json`, {
+                            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req)
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        this.finalizeNotice = 'Pedido enviado ao caixa. Aguarde a confirmação...';
+                        this.fetchTableData();
+                        setTimeout(() => {
+                            if (this.finalizing && !this.finalized) {
+                                this.finalizing = false;
+                                this.finalizeNotice = 'O caixa ainda não confirmou. Se demorar, chame o atendente. Você pode tocar em "Finalizar Pedido" para tentar de novo.';
+                            }
+                        }, 30000);
+                    } catch (e) {
+                        this.finalizing = false;
+                        this.finalizeNotice = 'Não foi possível enviar agora. Verifique sua internet e tente novamente.';
+                    }
+                },
+
+                // ===== Avaliação: uma única vez por comanda =====
+                async refreshRatedState() {
+                    const sid = this.ratingSid;
+                    try {
+                        const local = localStorage.getItem('sc_rated_' + sid);
+                        if (local) { this.markRated(sid, JSON.parse(local)); return; }
+                    } catch (e) {}
+                    try {
+                        const r = await fetch(`${SC_DB}/avaliacoes_sessao/${encodeURIComponent(sid)}.json`, { cache: 'no-store' });
+                        if (r.ok) {
+                            const d = await r.json();
+                            if (d) this.markRated(sid, d);
+                        }
+                    } catch (e) {}
+                },
+                markRated(sid, info) {
+                    this.alreadyRated = true;
+                    if (info && info.service) this.ratingService = info.service;
+                    if (info && info.food) this.ratingFood = info.food;
+                    try { localStorage.setItem('sc_rated_' + sid, JSON.stringify({ service: this.ratingService, food: this.ratingFood, at: Date.now() })); } catch (e) {}
+                },
+                // Reserva a avaliação desta comanda no Firebase. Só quem chega primeiro consegue (if-match: null_etag).
+                async claimRating(sid, payload) {
+                    const url = `${SC_DB}/avaliacoes_sessao/${encodeURIComponent(sid)}.json`;
+                    try {
+                        const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'if-match': 'null_etag' }, body: JSON.stringify(payload) });
+                        if (r.status === 412) return 'exists';
+                        if (r.ok) return 'ok';
+                    } catch (e) { /* cai para o método alternativo abaixo */ }
+                    const g = await fetch(url, { cache: 'no-store' });
+                    if (!g.ok) throw new Error('HTTP ' + g.status);
+                    if ((await g.json()) !== null) return 'exists';
+                    const p = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!p.ok) throw new Error('HTTP ' + p.status);
+                    return 'ok';
+                },
+
+                async submitFeedback() {
+                    if (!this.canRate || this.submittingRating) return;
+                    this.submittingRating = true;
+                    const sid = this.ratingSid;
+                    const fb = {
+                        id: Date.now(),
+                        receivedAt: Date.now(),   // data/hora em que o sistema recebeu a avaliação
+                        sid: sid,
+                        table: this.tableNumber,
+                        client: this.clientName || 'Cliente',
+                        service: this.ratingService,
+                        food: this.ratingFood,
+                        total: this.total,
+                        items: this.items,
+                        comment: this.feedbackComment || 'Sem comentários',
+                        time: new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                    };
+                    const lockUrl = `${SC_DB}/avaliacoes_sessao/${encodeURIComponent(sid)}.json`;
+                    try {
+                        const lock = await this.claimRating(sid, { id: fb.id, service: fb.service, food: fb.food, ts: Date.now() });
+                        if (lock === 'exists') {
+                            this.markRated(sid, null);
+                            this.triggerSuccessNotification('Esta comanda já foi avaliada. Obrigado!', 'fa-star');
+                            return;
+                        }
+                        try {
+                            const res = await fetch(`${SC_DB}/feedbacks.json`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fb)
+                            });
+                            if (!res.ok) throw new Error('HTTP ' + res.status);
+                        } catch (e) {
+                            // não conseguiu gravar a avaliação: libera a reserva para o cliente tentar de novo
+                            try { await fetch(lockUrl, { method: 'DELETE' }); } catch (e2) {}
+                            throw e;
+                        }
+                        this.markRated(sid, { service: fb.service, food: fb.food });
+                        this.feedbackComment = '';
+                        this.triggerSuccessNotification('Avaliação enviada com sucesso!');
+                    } catch (e) {
+                        this.triggerSuccessNotification('Não foi possível enviar. Tente novamente.', 'fa-triangle-exclamation');
+                    } finally {
+                        this.submittingRating = false;
+                    }
+                },
+
+                // ===== Código sequencial da encomenda: PEDIDO:01, PEDIDO:02... (contador único no Firebase) =====
+                async nextOrderNumber() {
+                    const url = `${SC_DB}/contadores/encomenda.json`;
+                    const r = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ '.sv': { increment: 1 } }) });
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    let v = await r.json();
+                    if (typeof v !== 'number') {   // alguns servidores não devolvem o valor: lê o contador
+                        const g = await fetch(url, { cache: 'no-store' });
+                        v = g.ok ? await g.json() : null;
+                    }
+                    if (typeof v !== 'number') throw new Error('contador inválido');
+                    return v;
+                },
+
+                // ===== Acompanhar encomendas =====
+                // Comanda (cliente) ativa na mesa neste momento
+                get hasActiveSession() { return !!this.sid && this.tableOpen && !this.sessionEnded; },
+                // A encomenda é deste cliente? (mesma comanda OU mesmo WhatsApp cadastrado para o cliente ativo da mesa).
+                // Assim, se o cliente sair do app e voltar, o número do pedido dele continua sendo exibido.
+                ownsEncomenda(e, sid) {
+                    if (!e) return false;
+                    if (e.sessionId && e.sessionId === sid) return true;
+                    const mine = this.tableWa, theirs = String(e.whatsappDigits || '').replace(/\D/g, '');
+                    if (mine.length < 8 || theirs.length < 8) return false;
+                    if (/^55?11999999999$|^5511999999999$/.test(mine)) return false;   // número padrão (comanda sem WhatsApp)
+                    return mine.slice(-8) === theirs.slice(-8);
+                },
+                // Chave de armazenamento individual por sessão: um cliente nunca enxerga as encomendas do anterior
+                encStoreKey() { return 'sc_my_enc_' + this.sid; },
+                myEncKeys() {
+                    if (!this.sid) return [];
+                    try { return JSON.parse(localStorage.getItem(this.encStoreKey()) || '[]'); } catch (e) { return []; }
+                },
+                saveMyEncKey(key) {
+                    if (!this.sid) return;
+                    const list = this.myEncKeys();
+                    if (!list.includes(key)) list.push(key);
+                    try { localStorage.setItem(this.encStoreKey(), JSON.stringify(list.slice(-30))); } catch (e) {}
+                    try {   // lista geral deste aparelho (só consulta; quem pode ver cada pedido é decidido por ownsEncomenda + regras do banco)
+                        const all = JSON.parse(localStorage.getItem('sc_enc_all') || '[]');
+                        if (!all.includes(key)) all.push(key);
+                        localStorage.setItem('sc_enc_all', JSON.stringify(all.slice(-60)));
+                    } catch (e) {}
+                    this.myEncCount = list.length;
+                },
+                // Limpa tudo que é da comanda anterior (lista, busca, carrinho e campos da encomenda)
+                resetEncomendaSession(keepSid) {
+                    this.myEncomendas = [];
+                    this.myEncCount = 0;
+                    this.tableWa = '';
+                    this.trackWhatsapp = '';
+                    this.encWhatsapp = '';
+                    this.encDescription = '';
+                    this.cartPadaria = {};
+                    this.closeTrack();
+                },
+                // Este link/QR pertence a uma comanda que já terminou (mesa passou para outro cliente)
+                endSessionLocal() {
+                    this.sessionEnded = true;
+                    this.tableOpen = false;
+                    this.resetEncomendaSession();
+                },
+                stepIndex(st) { const i = this.trackSteps.indexOf(st === 'Pronta para retirada' ? 'Pronta' : (st || 'Recebida')); return i < 0 ? 0 : i; },
+                statusClass(st) {
+                    return ({
+                        'Recebida': 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+                        'Em produção': 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                        'Pronta para retirada': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+                        'Entregue': 'bg-slate-700 text-slate-300 border-slate-600',
+                        'Cancelada': 'bg-red-500/10 text-red-300 border-red-500/30'
+                    })[st || 'Recebida'] || 'bg-slate-700 text-slate-300 border-slate-600';
+                },
+                fmtDate(d) { if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return d || '--'; const p = d.split('-'); return p[2] + '/' + p[1] + '/' + p[0]; },
+                openTrack() {
+                    this.showTrackModal = true;
+                    this.loadMyEncomendas();
+                    clearInterval(this.trackTimer);
+                    this.trackTimer = setInterval(() => { if (this.showTrackModal) this.loadMyEncomendas(true); }, 6000);
+                },
+                closeTrack() { this.showTrackModal = false; clearInterval(this.trackTimer); },
+                async loadMyEncomendas(silent) {
+                    const sid = this.sid;
+                    // Sem comanda ativa nesta mesa: não mostra nada (nunca traz dados de cliente anterior)
+                    if (!sid || !this.hasActiveSession) {
+                        this.myEncomendas = []; this.myEncCount = 0; this.trackLoading = false;
+                        return;
+                    }
+                    if (!silent) this.trackLoading = true;
+                    const q = String(this.trackWhatsapp || '').replace(/\D/g, '');
+                    // Busca: 8+ dígitos = WhatsApp; poucos dígitos = número do pedido (ex.: "02", "PEDIDO:02")
+                    const byNumber = q.length > 0 && q.length < 8 ? parseInt(q, 10) : null;
+                    const byWa = q.length >= 8 ? q : null;
+                    let keys = this.myEncKeys();                                   // padrão: pedidos desta comanda
+                    if (byNumber !== null || byWa) {                               // busca: olha também os pedidos feitos por este aparelho antes
+                        try { keys = Array.from(new Set(keys.concat(JSON.parse(localStorage.getItem('sc_enc_all') || '[]')))); } catch (e) {}
+                    }
+                    // O banco só entrega ao cliente os pedidos criados por ele mesmo (login anônimo); aqui ainda
+                    // filtramos para mostrar somente os do cliente ativo agora (mesma comanda ou mesmo WhatsApp da mesa)
+                    const got = await Promise.all(keys.map(async k => {
+                        try {
+                            const r = await fetch(`${SC_DB}/encomendas/${k}.json`, { cache: 'no-store' });
+                            if (!r.ok) return null;
+                            const d = await r.json();
+                            return (d && this.ownsEncomenda(d, sid)) ? [k, d] : null;
+                        } catch (e) { return null; }
+                    }));
+                    let list = got.filter(Boolean).map(([k, d]) => Object.assign({ fbKey: k }, d));
+                    if (byNumber !== null) list = list.filter(e => Number(e.orderNumber) === byNumber);
+                    else if (byWa) list = list.filter(e => String(e.whatsappDigits || '').slice(-8) === byWa.slice(-8));
+                    if (sid !== this.sid || !this.hasActiveSession) { this.trackLoading = false; return; }   // cliente mudou durante a busca
+                    this.myEncomendas = list.sort((a, b) => (b.id || 0) - (a.id || 0));
+                    if (byNumber === null && !byWa) this.myEncCount = this.myEncomendas.length;
+                    this.trackLoading = false;
+                },
+
+                async submitPadariaEncomenda() {
+                    if(!this.hasActiveSession) {
+                        alert('Não há uma comanda ativa nesta mesa. Peça ao atendente para abrir a sua comanda e tente novamente.');
+                        return;
+                    }
+                    if(!this.encName || !this.encWhatsapp) {
+                        alert('Por favor, informe seu Nome e WhatsApp para a encomenda!');
+                        return;
+                    }
+
+                    const selectedItemsList = [];
+                    const selectedObjs = [];
+                    Object.keys(this.cartPadaria).forEach(idStr => {
+                        const id = parseInt(idStr);
+                        const prod = this.padariaProdutos.find(p => p.id === id);
+                        if(prod) {
+                            selectedItemsList.push(`${this.cartPadaria[idStr]}x ${prod.name}`);
+                            selectedObjs.push({ id: 'p' + prod.id, name: prod.name, qty: this.cartPadaria[idStr], price: prod.price });
+                        }
+                    });
+
+                    if(selectedItemsList.length === 0 && !this.encDescription) {
+                        alert('Por favor, selecione pelo menos 1 produto da padaria ou descreva o seu pedido!');
+                        return;
+                    }
+
+                    const itemsText = selectedItemsList.join(', ') + (this.encDescription ? ` (Obs: ${this.encDescription})` : '');
+
+                    let orderNumber;
+                    try { orderNumber = await this.nextOrderNumber(); }
+                    catch (e) { alert('Não foi possível gerar o número do pedido. Verifique sua internet e tente novamente.'); return; }
+
+                    const encomendaData = {
+                        id: Date.now(),
+                        orderNumber: orderNumber,
+                        orderCode: 'PEDIDO:' + String(orderNumber).padStart(2, '0'),
+                        client: this.encName,
+                        sessionId: this.sid,          // vincula a encomenda ao cliente ativo da mesa
+                        uid: SC_AUTH.uid() || 'anon', // dono do pedido (o banco só deixa este login ler/criar o próprio pedido)
+                        mesa: this.tableNumber,
+                        whatsapp: this.encWhatsapp,
+                        whatsappDigits: String(this.encWhatsapp).replace(/\D/g, ''),
+                        date: this.encDate,
+                        time: this.encTime,
+                        sector: 'Padaria & Confeitaria',
+                        status: 'Recebida',
+                        itemsList: selectedObjs,
+                        itemsDescription: itemsText,
+                        totalValue: this.totalPadariaEncomenda,
+                        createdAt: new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                    };
+
+                    try {
+                        const res = await fetch(`${SC_DB}/encomendas.json`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(encomendaData)
+                        });
+                        if (!res.ok) throw new Error('HTTP ' + res.status);
+                        const j = await res.json();
+                        if (j && j.name) this.saveMyEncKey(j.name);
+                        this.trackWhatsapp = this.encWhatsapp;
+                        this.triggerSuccessNotification('Encomenda enviada: ' + encomendaData.orderCode);
+                        alert('Sua encomenda foi enviada! Código do pedido: ' + encomendaData.orderCode + '\n\nVocê pode acompanhar o andamento em "Acompanhar minhas encomendas".');
+                        this.cartPadaria = {};
+                        this.encDescription = '';
+                        this.openTrack();
+                    } catch(e) {
+                        alert('Erro ao enviar encomenda. Tente novamente.');
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

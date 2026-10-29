@@ -1,0 +1,389 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "staff": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+        ".validate": "newData.hasChildren(['name','role','active'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "email": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "role": {
+          ".validate": "newData.isString() && (newData.val() === 'Gerente' || newData.val() === 'Garçom' || newData.val() === 'Cozinheiro' || newData.val() === 'Caixa')"
+        },
+        "active": {
+          ".validate": "newData.isBoolean()"
+        },
+        "allowedTabs": {
+          "$i": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          }
+        },
+        "mustChangePassword": {
+          ".write": "auth != null && auth.uid === $uid && newData.val() === false",
+          ".validate": "newData.isBoolean()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "createdBy": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "tables": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "historico": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$id": {
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && (newData.exists() || root.child('staff').child(auth.uid).child('role').val() === 'Gerente')"
+      }
+    },
+    "chats_arquivo": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "staff_presence": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "ping": {
+        ".read": "auth != null",
+        ".validate": "newData.isNumber()"
+      },
+      "agent": {
+        ".validate": "newData.isString() && newData.val().length <= 80"
+      },
+      "$other": {
+        ".validate": false
+      }
+    },
+    "backups": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$id": {
+        ".write": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente') || (auth != null && root.child('staff').child(auth.uid).child('active').val() === true && !data.exists())",
+        ".validate": "newData.child('app').val() === 'smartcomanda' && newData.hasChild('localStorage')"
+      }
+    },
+    "exclusoes": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && root.child('staff').child(auth.uid).child('role').val() === 'Gerente'",
+      "$id": {
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true && !data.exists() && newData.exists() && newData.child('uid').val() === auth.uid",
+        ".validate": "newData.hasChildren(['id','ts','tipo','uid'])"
+      }
+    },
+    "mesa_sid": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+    },
+    "sessoes": {
+      "$sid": {
+        ".read": "auth != null",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+      }
+    },
+    "mesa_publica": {
+      "$mesa": {
+        ".read": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true) || (auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true)",
+        ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true"
+      }
+    },
+    "acessos": {
+      "$sid": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || (auth != null && root.child('staff').child(auth.uid).child('active').val() === true))",
+          ".write": "(auth != null && root.child('staff').child(auth.uid).child('active').val() === true) || (auth != null && auth.uid === $uid && newData.val() === true && $sid.matches(/^s[a-z0-9]{10,40}$/) && root.child('sessoes').child($sid).child('status').val() === 'ocupada')",
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
+    "encomendas": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".indexOn": [
+        "whatsappDigits",
+        "orderNumber",
+        "sessionId"
+      ],
+      "$id": {
+        ".read": "auth != null && data.child('uid').val() === auth.uid",
+        ".write": "auth != null && !data.exists() && $id.matches(/^-[A-Za-z0-9_-]{15,25}$/) && newData.child('uid').val() === auth.uid && newData.child('sessionId').isString() && root.child('acessos').child(newData.child('sessionId').val()).child(auth.uid).val() === true && newData.child('status').val() === 'Recebida' && newData.child('totalValue').isNumber() && newData.child('totalValue').val() >= 0 && newData.child('totalValue').val() <= 20000",
+        "id": {
+          ".validate": "newData.isNumber()"
+        },
+        "orderNumber": {
+          ".validate": "newData.isNumber()"
+        },
+        "orderCode": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "client": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "sessionId": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "uid": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "mesa": {
+          ".validate": "newData.isNumber()"
+        },
+        "whatsapp": {
+          ".validate": "newData.isString() && newData.val().length <= 40"
+        },
+        "whatsappDigits": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "date": {
+          ".validate": "newData.isString() && newData.val().length <= 12"
+        },
+        "time": {
+          ".validate": "newData.isString() && newData.val().length <= 8"
+        },
+        "sector": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "status": {
+          ".validate": "newData.isString() && newData.val().length <= 30"
+        },
+        "itemsDescription": {
+          ".validate": "newData.isString() && newData.val().length <= 1600"
+        },
+        "totalValue": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000000"
+        },
+        "extraValue": {
+          ".validate": "newData.isNumber()"
+        },
+        "createdAt": {
+          ".validate": "newData.isString() && newData.val().length <= 40"
+        },
+        "itemsList": {
+          "$i": {
+            "id": {
+              ".validate": "(newData.isString() && newData.val().length <= 40) || newData.isNumber()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 160"
+            },
+            "qty": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1000"
+            },
+            "price": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 100000"
+            },
+            "$other": {
+              ".validate": "(newData.isString() && newData.val().length <= 100) || newData.isNumber() || newData.isBoolean()"
+            }
+          }
+        },
+        "$other": {
+          ".validate": "(newData.isString() && newData.val().length <= 200) || newData.isNumber() || newData.isBoolean()"
+        }
+      }
+    },
+    "contadores": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "encomenda": {
+        ".write": "auth != null && newData.isNumber() && newData.val() <= 1000000 && newData.val() === (data.exists() ? data.val() + 1 : 1)"
+      }
+    },
+    "chats": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        "$msg": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true && !data.exists() && $msg.matches(/^-[A-Za-z0-9_-]{15,25}$/) && newData.child('sender').val() === 'cliente'",
+          ".validate": "newData.hasChildren(['sender','text','timestamp'])",
+          "sender": {
+            ".validate": "newData.val() === 'cliente' || newData.val() === 'atendente'"
+          },
+          "text": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 500"
+          },
+          "timestamp": {
+            ".validate": "newData.isNumber()"
+          },
+          "table": {
+            ".validate": "newData.isNumber()"
+          },
+          "time": {
+            ".validate": "newData.isString() && newData.val().length <= 12"
+          },
+          "clientName": {
+            ".validate": "newData.isString() && newData.val().length <= 80"
+          },
+          "agent": {
+            ".validate": "newData.isString() && newData.val().length <= 80"
+          },
+          "kind": {
+            ".validate": "newData.isString() && newData.val().length <= 20"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "chat_meta": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        "clientPing": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+          ".validate": "newData.isNumber()"
+        },
+        "clientReadUpTo": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+          ".validate": "newData.isNumber()"
+        },
+        "clientTyping": {
+          ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+          ".validate": "newData.isNumber()"
+        },
+        "staffTyping": {
+          ".validate": "newData.isNumber()"
+        },
+        "staffReadUpTo": {
+          ".validate": "newData.isNumber()"
+        },
+        "agent": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "finalizar_pedidos": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$mesa": {
+        ".read": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('mesa_sid').child($mesa).exists() && root.child('acessos').child(root.child('mesa_sid').child($mesa).val()).child(auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['mesa','sid','ts']) && newData.child('sid').val() === root.child('mesa_sid').child($mesa).val()",
+        "mesa": {
+          ".validate": "newData.isNumber()"
+        },
+        "sid": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "client": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        },
+        "total": {
+          ".validate": "newData.isNumber()"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "source": {
+          ".validate": "newData.val() === 'celular'"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "feedbacks": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$id": {
+        ".write": "auth != null && !data.exists() && newData.child('sid').isString() && $id === 'fbs_' + newData.child('sid').val() && root.child('acessos').child(newData.child('sid').val()).child(auth.uid).val() === true",
+        ".validate": "newData.hasChildren(['id','service','food'])",
+        "id": {
+          ".validate": "newData.isNumber()"
+        },
+        "receivedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "sid": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "table": {
+          ".validate": "newData.isNumber()"
+        },
+        "client": {
+          ".validate": "newData.isString() && newData.val().length <= 120"
+        },
+        "service": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5"
+        },
+        "food": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5"
+        },
+        "total": {
+          ".validate": "newData.isNumber()"
+        },
+        "comment": {
+          ".validate": "newData.isString() && newData.val().length <= 600"
+        },
+        "time": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "items": {
+          "$i": {
+            "id": {
+              ".validate": "(newData.isString() && newData.val().length <= 40) || newData.isNumber()"
+            },
+            "name": {
+              ".validate": "newData.isString() && newData.val().length <= 160"
+            },
+            "qty": {
+              ".validate": "newData.isNumber()"
+            },
+            "price": {
+              ".validate": "newData.isNumber()"
+            },
+            "status": {
+              ".validate": "newData.isString() && newData.val().length <= 40"
+            },
+            "$other": {
+              ".validate": "(newData.isString() && newData.val().length <= 100) || newData.isNumber() || newData.isBoolean()"
+            }
+          }
+        },
+        "$other": {
+          ".validate": "(newData.isString() && newData.val().length <= 200) || newData.isNumber() || newData.isBoolean()"
+        }
+      }
+    },
+    "avaliacoes_sessao": {
+      ".read": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      ".write": "auth != null && root.child('staff').child(auth.uid).child('active').val() === true",
+      "$sid": {
+        ".read": "auth != null && root.child('acessos').child($sid).child(auth.uid).val() === true",
+        ".write": "auth != null && root.child('acessos').child($sid).child(auth.uid).val() === true && !data.exists() && newData.exists()",
+        "id": {
+          ".validate": "newData.isNumber()"
+        },
+        "service": {
+          ".validate": "newData.isNumber()"
+        },
+        "food": {
+          ".validate": "newData.isNumber()"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    }
+  }
+}
